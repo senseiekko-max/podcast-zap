@@ -9,38 +9,65 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// Mantém o Render acordado
-http.createServer((req, res) => { res.write('Bot Online!'); res.end(); }).listen(process.env.PORT || 3000);
+// --- SERVER PARA O RENDER NÃO DORMIR ---
+http.createServer((req, res) => {
+  res.write('Bot Online!');
+  res.end();
+}).listen(process.env.PORT || 3000);
 
-// Conexão MongoDB
-mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Conectado ao Olimpo!"));
-const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ autor: String, conteudo: String, timestamp: { type: Date, default: Date.now } }));
+// --- CONEXÃO MONGODB ---
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ Conectado ao Olimpo!"))
+  .catch(err => console.error("❌ Erro no Banco:", err));
+
+const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
+    autor: String,
+    conteudo: String,
+    timestamp: { type: Date, default: Date.now }
+}));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
+// --- CONFIGURAÇÃO DO BOT COM CORREÇÃO PARA O RENDER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
-});
-
-client.on('qr', (qr) => { qrcode.generate(qr, { small: true }); });
-client.on('ready', () => console.log('🎙️ Podcast Épico Online!'));
-
-client.on('message', async (msg) => {
-    if (msg.from === ID_GRUPO) {
-        await Fofoca.create({ autor: msg._data.notifyName || 'Membro', conteudo: msg.body });
+    puppeteer: {
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+        ]
     }
 });
 
+client.on('qr', (qr) => {
+    console.log('--- ESCANEIE O QR CODE ABAIXO ---');
+    qrcode.generate(qr, { small: true });
+});
+
+client.on('ready', () => console.log('🎙️ Podcast Épico Online!'));
+
+// --- COLETA DE MENSAGENS ---
+client.on('message', async (msg) => {
+    if (msg.from === ID_GRUPO) {
+        const autor = msg._data.notifyName || 'Membro';
+        await Fofoca.create({ autor, conteudo: msg.body });
+    }
+});
+
+// --- GERAÇÃO DO PODCAST ÉPICO ---
 async function gerarPodcast() {
     const fofocas = await Fofoca.find().sort({ timestamp: 1 });
     if (fofocas.length === 0) return;
 
     const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
-    // Ajuste do tom para ser épico e combinar com a música
+
     const prompt = `Você é o Ricardo e a Julia, deuses do entretenimento. 
     O tom deve ser grandioso, top e épico, como se estivessem no topo do Monte Olimpo.
     Usem gírias atuais mas com uma postura superior. 
@@ -50,19 +77,19 @@ async function gerarPodcast() {
     const roteiro = result.response.text();
 
     try {
-        const response = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
+        // 1. Gera voz
+        const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
             { text: roteiro, model_id: "eleven_multilingual_v2" },
             { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY }, responseType: 'arraybuffer' }
         );
-        
-        fs.writeFileSync('voz.mp3', Buffer.from(response.data));
+        fs.writeFileSync('voz.mp3', Buffer.from(resVoz.data));
 
-        // Mistura com o fundo.mp3 que você subiu
+        // 2. Mistura com o instrumental (fundo.mp3)
         ffmpeg()
             .input('voz.mp3')
             .input('fundo.mp3')
             .complexFilter([
-                '[1:a]volume=0.15[a1]', // Música de fundo no volume ideal
+                '[1:a]volume=0.15[a1]', 
                 '[0:a][a1]amix=inputs=2:duration=first[aout]'
             ])
             .map('[aout]')
@@ -74,8 +101,7 @@ async function gerarPodcast() {
                 console.log("✅ Podcast Divino enviado!");
             });
 
-    } catch (err) { console.error("Erro no processo:", err); }
+    } catch (err) { console.error("Erro no Processo:", err); }
 }
 
-cron.schedule('0 20 * * *', () => gerarPodcast());
-client.initialize();
+// Agenda 20h
