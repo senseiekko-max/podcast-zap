@@ -7,7 +7,7 @@ const cron = require('node-cron');
 const mongoose = require('mongoose');
 const http = require('http');
 const fs = require('fs');
-const ffmpeg = require('fluent-ffmpeg');
+const ffmpeg = require('fluent-ffmpeg'); 
 
 // --- SERVER PARA O RENDER NÃO DERRUBAR ---
 const port = process.env.PORT || 3000;
@@ -101,3 +101,4 @@ async function gerarPodcast() {
 
 cron.schedule('0 20 * * *', () => gerarPodcast());
 client.initialize();
+
