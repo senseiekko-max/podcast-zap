@@ -9,58 +9,46 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER PARA O RENDER NÃO DORMIR ---
-http.createServer((req, res) => {
-  res.write('Bot Online!');
-  res.end();
-}).listen(process.env.PORT || 3000);
+// --- SERVER PARA O RENDER ---
+http.createServer((req, res) => { res.write('Bot Online!'); res.end(); }).listen(process.env.PORT || 3000);
 
 // --- CONEXÃO MONGODB ---
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ Conectado ao Olimpo!"))
-  .catch(err => console.error("❌ Erro no Banco:", err));
-
-const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
-    autor: String,
-    conteudo: String,
-    timestamp: { type: Date, default: Date.now }
-}));
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Olimpo Conectado!"));
+const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ autor: String, conteudo: String, timestamp: { type: Date, default: Date.now } }));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO DO BOT COM CORREÇÃO PARA O RENDER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     }
 });
 
-client.on('qr', (qr) => {
-    console.log('--- ESCANEIE O QR CODE ABAIXO ---');
-    qrcode.generate(qr, { small: true });
-});
+client.on('qr', (qr) => { qrcode.generate(qr, { small: true }); });
+client.on('ready', () => console.log('🎙️ Podcast dos Deuses Pronto!'));
 
-client.on('ready', () => console.log('🎙️ Podcast Épico Online!'));
-
-// --- COLETA DE MENSAGENS ---
+// --- COLETA DE CONVERSAS E ÁUDIOS ---
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
         const autor = msg._data.notifyName || 'Membro';
-        await Fofoca.create({ autor, conteudo: msg.body });
+        let texto = msg.body;
+
+        if (msg.hasMedia && (msg.type === 'audio' || msg.type === 'ptt')) {
+            try {
+                const media = await msg.downloadMedia();
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                const result = await model.generateContent(["Transcreva este áudio de fofoca brevemente:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
+                texto = `[Áudio transcrito]: ${result.response.text()}`;
+            } catch (e) { texto = "[Áudio]"; }
+        }
+        await Fofoca.create({ autor, conteudo: texto });
     }
 });
 
-// --- GERAÇÃO DO PODCAST ÉPICO ---
+// --- O SHOW DOS DEUSES ---
 async function gerarPodcast() {
     const fofocas = await Fofoca.find().sort({ timestamp: 1 });
     if (fofocas.length === 0) return;
@@ -68,40 +56,40 @@ async function gerarPodcast() {
     const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const prompt = `Você é o Ricardo e a Julia, deuses do entretenimento. 
-    O tom deve ser grandioso, top e épico, como se estivessem no topo do Monte Olimpo.
-    Usem gírias atuais mas com uma postura superior. 
-    Narrem as fofocas do dia de forma lendária: ${contexto}`;
+    const prompt = `Você é o Ricardo (irônico e sarcástico) e a Julia (engraçada e debochada).
+    O tom deve ser ÉPICO e "TOP", combinando com música instrumental divina.
+    
+    1. Comece SEMPRE com: "Boa noite deuses do Olimpo! Como foi o dia de guerra hoje?" ou variações divinas bem grandiosas.
+    2. Façam um resumo de todas as fofocas e áudios que aconteceram no grupo hoje.
+    3. Interajam um com o outro, tirando onda com o que os membros falaram.
+    4. Usem gírias, mas mantenham a postura de deuses.
+    
+    Conversas do dia:
+    ${contexto}`;
 
     const result = await model.generateContent(prompt);
     const roteiro = result.response.text();
 
     try {
-        // 1. Gera voz
         const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
             { text: roteiro, model_id: "eleven_multilingual_v2" },
             { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY }, responseType: 'arraybuffer' }
         );
         fs.writeFileSync('voz.mp3', Buffer.from(resVoz.data));
 
-        // 2. Mistura com o instrumental (fundo.mp3)
         ffmpeg()
             .input('voz.mp3')
             .input('fundo.mp3')
-            .complexFilter([
-                '[1:a]volume=0.15[a1]', 
-                '[0:a][a1]amix=inputs=2:duration=first[aout]'
-            ])
+            .complexFilter(['[1:a]volume=0.15[a1]', '[0:a][a1]amix=inputs=2:duration=first[aout]'])
             .map('[aout]')
             .save('final.mp3')
             .on('end', async () => {
                 const media = MessageMedia.fromFilePath('final.mp3');
                 await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
-                await Fofoca.deleteMany({});
-                console.log("✅ Podcast Divino enviado!");
+                await Fofoca.deleteMany({}); // Limpa o dia
             });
-
-    } catch (err) { console.error("Erro no Processo:", err); }
+    } catch (err) { console.error(err); }
 }
 
-// Agenda 20h
+cron.schedule('0 20 * * *', () => gerarPodcast());
+client.initialize();
