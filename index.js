@@ -9,11 +9,11 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER PARA O RENDER ---
+// Mantém o Render acordado
 http.createServer((req, res) => { res.write('Bot Online!'); res.end(); }).listen(process.env.PORT || 3000);
 
-// --- MONGODB ---
-mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Banco Conectado!"));
+// Conexão MongoDB
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Conectado ao Olimpo!"));
 const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ autor: String, conteudo: String, timestamp: { type: Date, default: Date.now } }));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -25,7 +25,7 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => { qrcode.generate(qr, { small: true }); });
-client.on('ready', () => console.log('🎙️ Podcast Online com Trilha Sonora!'));
+client.on('ready', () => console.log('🎙️ Podcast Épico Online!'));
 
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
@@ -39,11 +39,17 @@ async function gerarPodcast() {
 
     const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(`Você é o Ricardo e a Julia. Façam um podcast engraçado: ${contexto}`);
+    
+    // Ajuste do tom para ser épico e combinar com a música
+    const prompt = `Você é o Ricardo e a Julia, deuses do entretenimento. 
+    O tom deve ser grandioso, top e épico, como se estivessem no topo do Monte Olimpo.
+    Usem gírias atuais mas com uma postura superior. 
+    Narrem as fofocas do dia de forma lendária: ${contexto}`;
+
+    const result = await model.generateContent(prompt);
     const roteiro = result.response.text();
 
     try {
-        // 1. Gera a voz na ElevenLabs
         const response = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
             { text: roteiro, model_id: "eleven_multilingual_v2" },
             { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY }, responseType: 'arraybuffer' }
@@ -51,14 +57,13 @@ async function gerarPodcast() {
         
         fs.writeFileSync('voz.mp3', Buffer.from(response.data));
 
-        // 2. Mistura a voz com a música de fundo (fundo.mp3)
-        // A música de fundo fica com volume baixo (0.1) para não cobrir a voz
+        // Mistura com o fundo.mp3 que você subiu
         ffmpeg()
             .input('voz.mp3')
             .input('fundo.mp3')
             .complexFilter([
-                '[1:a]volume=0.1[a1]', // Baixa o volume do fundo
-                '[0:a][a1]amix=inputs=2:duration=first[aout]' // Junta os dois
+                '[1:a]volume=0.15[a1]', // Música de fundo no volume ideal
+                '[0:a][a1]amix=inputs=2:duration=first[aout]'
             ])
             .map('[aout]')
             .save('final.mp3')
@@ -66,10 +71,10 @@ async function gerarPodcast() {
                 const media = MessageMedia.fromFilePath('final.mp3');
                 await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
                 await Fofoca.deleteMany({});
-                console.log("✅ Podcast com trilha enviado!");
+                console.log("✅ Podcast Divino enviado!");
             });
 
-    } catch (err) { console.error("Erro:", err); }
+    } catch (err) { console.error("Erro no processo:", err); }
 }
 
 cron.schedule('0 20 * * *', () => gerarPodcast());
