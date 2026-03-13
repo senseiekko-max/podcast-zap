@@ -15,7 +15,7 @@ http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.write('Podcast Olimpo Online!');
   res.end();
-}).listen(port);
+}).listen(port, () => console.log(`🌍 Servidor na porta ${port}`));
 
 // --- CONEXÃO MONGODB ---
 mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Olimpo Conectado!"));
@@ -28,11 +28,12 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PUPPETEER ---
+// --- CONFIGURAÇÃO PUPPETEER (RENDER PATH) ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
+        executablePath: '/opt/render/project/src/.cache/puppeteer/chrome/linux-140.0.7680.66/chrome-linux64/chrome',
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     }
 });
@@ -52,7 +53,7 @@ client.on('message', async (msg) => {
             try {
                 const media = await msg.downloadMedia();
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const result = await model.generateContent(["Resuma o áudio:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
+                const result = await model.generateContent(["Resuma o áudio brevemente:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
                 texto = `[Áudio]: ${result.response.text()}`;
             } catch (e) { texto = "[Áudio]"; }
         }
@@ -65,7 +66,7 @@ async function gerarPodcast() {
     if (fofocas.length === 0) return;
     const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `Você é o Ricardo e a Julia. Tom épico. Comece com: Boa noite deuses do Olimpo! Como foi o dia de guerra hoje? Resuma: ${contexto}`;
+    const prompt = `Você é o Ricardo e a Julia. Tom épico. Comece com: Boa noite deuses do Olimpo! Como foi o dia de guerra hoje? Resuma e zoe: ${contexto}`;
     const result = await model.generateContent(prompt);
     const roteiro = result.response.text();
     try {
