@@ -7,10 +7,10 @@ const cron = require('node-cron');
 const mongoose = require('mongoose');
 const http = require('http');
 const fs = require('fs');
-const ffmpeg = require('fluent-ffmpeg'); 
+const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER PARA O RENDER NÃO DERRUBAR ---
-const port = process.env.PORT || 3000;
+// --- SERVER PARA O RENDER NÃO DERRUBAR (PORTA 10000) ---
+const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.write('🎙️ Podcast Olimpo Online!');
@@ -18,22 +18,35 @@ http.createServer((req, res) => {
 }).listen(port, () => console.log(`🌍 Servidor rodando na porta ${port}`));
 
 // --- CONEXÃO MONGODB ---
-mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Olimpo Conectado!"));
-const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ autor: String, conteudo: String, timestamp: { type: Date, default: Date.now } }));
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log("✅ Olimpo Conectado!"))
+    .catch(err => console.error("❌ Erro Mongo:", err));
+
+const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ 
+    autor: String, 
+    conteudo: String, 
+    timestamp: { type: Date, default: Date.now } 
+}));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
+// --- CONFIGURAÇÃO PUPPETEER (PARA LINUX/RENDER) ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', '--disable-gpu']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ]
     }
 });
 
 client.on('qr', (qr) => {
-    console.log('--- ESCANEIE O QR CODE ---');
+    console.log('--- ESCANEIE O QR CODE ABAIXO ---');
     qrcode.generate(qr, { small: true });
 });
 
@@ -49,56 +62,22 @@ client.on('message', async (msg) => {
             try {
                 const media = await msg.downloadMedia();
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const result = await model.generateContent(["Resuma o que foi dito neste áudio de fofoca:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
-                texto = `[Áudio]: ${result.response.text()}`;
+                const result = await model.generateContent([
+                    "Resuma o que foi dito neste áudio de fofoca brevemente:", 
+                    { inlineData: { data: media.data, mimeType: media.mimetype } }
+                ]);
+                texto = `[Áudio transcrito]: ${result.response.text()}`;
             } catch (e) { texto = "[Áudio]"; }
         }
         await Fofoca.create({ autor, conteudo: texto });
     }
 });
 
-// --- O SHOW DOS DEUSES ---
+// --- O SHOW DOS DEUSES (RICARDO E JULIA) ---
 async function gerarPodcast() {
+    console.log("🎬 Iniciando gravação do Podcast...");
     const fofocas = await Fofoca.find().sort({ timestamp: 1 });
     if (fofocas.length === 0) return;
 
     const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `Você é o Ricardo (irônico) e a Julia (debochada).
-    O tom deve ser ÉPICO e "TOP", combinando com música instrumental divina.
-    
-    1. Comece SEMPRE com: "Boa noite deuses do Olimpo! Como foi o dia de guerra hoje?" ou algo épico e diferente.
-    2. Resumam as conversas e áudios do grupo de hoje, tirando uma onda pesada.
-    3. Interajam entre si como deuses observando os mortais.
-    
-    Conversas:
-    ${contexto}`;
-
-    const result = await model.generateContent(prompt);
-    const roteiro = result.response.text();
-
-    try {
-        const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
-            { text: roteiro, model_id: "eleven_multilingual_v2" },
-            { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY }, responseType: 'arraybuffer' }
-        );
-        fs.writeFileSync('voz.mp3', Buffer.from(resVoz.data));
-
-        ffmpeg()
-            .input('voz.mp3')
-            .input('fundo.mp3')
-            .complexFilter(['[1:a]volume=0.15[a1]', '[0:a][a1]amix=inputs=2:duration=first[aout]'])
-            .map('[aout]')
-            .save('final.mp3')
-            .on('end', async () => {
-                const media = MessageMedia.fromFilePath('final.mp3');
-                await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
-                await Fofoca.deleteMany({});
-            });
-    } catch (err) { console.error(err); }
-}
-
-cron.schedule('0 20 * * *', () => gerarPodcast());
-client.initialize();
-
+    const model = genAI.getGenerativeModel({ model: "gemini-1
