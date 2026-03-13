@@ -24,11 +24,8 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PARA NÃO TRAVAR O RENDER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
-    authTimeoutMs: 240000, // Aumentei para 4 minutos (o máximo possível)
-    qrMaxRetries: 10,
     puppeteer: {
         headless: true,
         args: [
@@ -36,25 +33,18 @@ const client = new Client({
             '--disable-setuid-sandbox', 
             '--disable-dev-shm-usage',
             '--disable-gpu',
-            '--no-first-run',
-            '--no-zygote',
             '--single-process'
         ]
     }
 });
 
 client.on('qr', (qr) => {
-    console.log('\n--- QR CODE GERADO (LEITURA RÁPIDA) ---');
+    console.log('\n--- ESCANEIE AGORA ---');
     qrcode.generate(qr, { small: false });
-    console.log('---------------------------------------\n');
+    console.log('----------------------\n');
 });
 
 client.on('ready', () => console.log('🎙️ Podcast dos Deuses Online!'));
-
-client.on('auth_failure', () => {
-    console.error('❌ Falha na autenticação. Reiniciando...');
-    process.exit(1); 
-});
 
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
