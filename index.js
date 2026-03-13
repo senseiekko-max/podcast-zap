@@ -15,104 +15,76 @@ http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.write('🎙️ Podcast Olimpo Online!');
   res.end();
-}).listen(port, () => console.log(`🌍 Servidor rodando na porta ${port}`));
+}).listen(port, () => console.log(`🌍 Servidor na porta ${port}`));
 
 // --- CONEXÃO MONGODB ---
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ Banco de dados Olimpo Conectado!"))
-    .catch(err => console.error("❌ Erro ao conectar no MongoDB:", err));
-
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Olimpo Conectado!"));
 const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ 
-    autor: String, 
-    conteudo: String, 
-    timestamp: { type: Date, default: Date.now } 
+    autor: String, conteudo: String, timestamp: { type: Date, default: Date.now } 
 }));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PUPPETEER SEM CAMINHOS FIXOS ---
+// --- CONFIGURAÇÃO PUPPETEER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
     }
 });
 
+// --- QR CODE OTIMIZADO PARA LEITURA ---
 client.on('qr', (qr) => {
-    console.log('--- ESCANEIE O QR CODE ABAIXO ---');
+    console.log('\n\n--- ESCANEIE O QR CODE ABAIXO ---');
+    console.log('DICA: Se estiver no PC, diminua o zoom da página para 80%\n');
+    
+    // small: false gera blocos maiores
+    // A string vazia antes ajuda a separar o código das bordas do log
     qrcode.generate(qr, { small: false });
+    
+    console.log('\n---------------------------------\n\n');
 });
 
-client.on('ready', () => console.log('🎙️ Podcast dos Deuses Pronto para o Zap!'));
+client.on('ready', () => console.log('🎙️ Podcast dos Deuses Pronto!'));
 
-// --- COLETA DE CONVERSAS E ÁUDIOS ---
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
         const autor = msg._data.notifyName || 'Membro';
         let texto = msg.body;
-
         if (msg.hasMedia && (msg.type === 'audio' || msg.type === 'ptt')) {
             try {
                 const media = await msg.downloadMedia();
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const result = await model.generateContent([
-                    "Resuma o que foi dito neste áudio de fofoca brevemente:", 
-                    { inlineData: { data: media.data, mimeType: media.mimetype } }
-                ]);
-                texto = `[Áudio transcrito]: ${result.response.text()}`;
+                const result = await model.generateContent(["Resuma o áudio:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
+                texto = `[Áudio]: ${result.response.text()}`;
             } catch (e) { texto = "[Áudio]"; }
         }
         await Fofoca.create({ autor, conteudo: texto });
     }
 });
 
-// --- FUNÇÃO DE GERAÇÃO DO PODCAST ---
 async function gerarPodcast() {
-    console.log("🎬 Iniciando a produção do Podcast diário...");
     const fofocas = await Fofoca.find().sort({ timestamp: 1 });
-    if (fofocas.length === 0) return console.log("Nenhuma fofoca hoje para gravar.");
-
+    if (fofocas.length === 0) return;
     const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `Você é o Ricardo (sarcástico) e a Julia (debochada). Tom épico. Resumam as fofocas: ${contexto}`;
-
+    const result = await model.generateContent(`Ricardo e Julia, tom épico, resumam: ${contexto}`);
+    const roteiro = result.response.text();
     try {
-        const result = await model.generateContent(prompt);
-        const roteiro = result.response.text();
-
         const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
             { text: roteiro, model_id: "eleven_multilingual_v2" },
             { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY }, responseType: 'arraybuffer' }
         );
         fs.writeFileSync('voz.mp3', Buffer.from(resVoz.data));
-
-        ffmpeg()
-            .input('voz.mp3')
-            .input('fundo.mp3')
-            .complexFilter(['[1:a]volume=0.15[a1]', '[0:a][a1]amix=inputs=2:duration=first[aout]'])
-            .map('[aout]')
-            .save('final.mp3')
-            .on('end', async () => {
-                const media = MessageMedia.fromFilePath('final.mp3');
-                await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
-                await Fofoca.deleteMany({});
-                console.log("✅ Podcast enviado!");
-            });
-    } catch (err) { console.error("❌ Erro ao gerar podcast:", err); }
+        ffmpeg().input('voz.mp3').input('fundo.mp3').complexFilter(['[1:a]volume=0.15[a1]', '[0:a][a1]amix=inputs=2:duration=first[aout]']).map('[aout]').save('final.mp3').on('end', async () => {
+            const media = MessageMedia.fromFilePath('final.mp3');
+            await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
+            await Fofoca.deleteMany({});
+        });
+    } catch (err) { console.error(err); }
 }
 
 cron.schedule('0 20 * * *', () => gerarPodcast());
-
-client.initialize().catch(err => console.error("❌ Erro ao iniciar o WhatsApp:", err));
-
+client.initialize();
