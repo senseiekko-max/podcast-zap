@@ -9,7 +9,7 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER PARA O RENDER (PORTA 10000) ---
+// --- SERVER SIMPLES (PORTA 10000) ---
 const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -20,21 +20,23 @@ http.createServer((req, res) => {
 // --- CONEXÃO MONGODB ---
 mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Olimpo Conectado!"));
 const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ 
-    autor: String, 
-    conteudo: String, 
-    timestamp: { type: Date, default: Date.now } 
+    autor: String, conteudo: String, timestamp: { type: Date, default: Date.now } 
 }));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PUPPETEER (RENDER PATH) ---
+// --- CONFIGURAÇÃO PUPPETEER SEM CAMINHO FIXO ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        executablePath: '/opt/render/project/src/.cache/puppeteer/chrome/linux-140.0.7680.66/chrome-linux64/chrome',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ]
     }
 });
 
@@ -53,7 +55,7 @@ client.on('message', async (msg) => {
             try {
                 const media = await msg.downloadMedia();
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const result = await model.generateContent(["Resuma o áudio brevemente:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
+                const result = await model.generateContent(["Resuma o áudio:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
                 texto = `[Áudio]: ${result.response.text()}`;
             } catch (e) { texto = "[Áudio]"; }
         }
@@ -66,8 +68,7 @@ async function gerarPodcast() {
     if (fofocas.length === 0) return;
     const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `Você é o Ricardo e a Julia. Tom épico. Comece com: Boa noite deuses do Olimpo! Como foi o dia de guerra hoje? Resuma e zoe: ${contexto}`;
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(`Ricardo e Julia, tom épico, resumam: ${contexto}`);
     const roteiro = result.response.text();
     try {
         const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
