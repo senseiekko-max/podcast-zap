@@ -50,7 +50,7 @@ const client = new Client({
 
 client.on('qr', (qr) => {
     console.log('--- ESCANEIE O QR CODE ABAIXO ---');
-    qrcode.generate(qr, { small: true });
+    qrcode.generate(qr, { small: false });
 });
 
 client.on('ready', () => console.log('🎙️ Podcast dos Deuses Pronto para o Zap!'));
@@ -115,3 +115,4 @@ async function gerarPodcast() {
 cron.schedule('0 20 * * *', () => gerarPodcast());
 
 client.initialize().catch(err => console.error("❌ Erro ao iniciar o WhatsApp:", err));
+
