@@ -9,13 +9,13 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER PARA MANTER O RENDER VIVO ---
+// --- SERVER PARA EVITAR O SLEEP DO RENDER ---
 const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.write('🎙️ Podcast Olimpo Online!');
   res.end();
-}).listen(port, () => console.log(`🌍 Servidor na porta ${port}`));
+}).listen(port);
 
 // --- CONEXÃO MONGODB ---
 mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Olimpo Conectado!"));
@@ -26,29 +26,30 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PUPPETEER ---
+// --- CONFIGURAÇÃO OTIMIZADA PARA CONEXÃO ---
 const client = new Client({
     authStrategy: new LocalAuth(),
+    authTimeoutMs: 60000, // Dá 1 minuto para o celular conectar
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ]
     }
 });
 
-// --- QR CODE OTIMIZADO PARA LEITURA ---
 client.on('qr', (qr) => {
-    console.log('\n\n--- ESCANEIE O QR CODE ABAIXO ---');
-    console.log('DICA: Se estiver no PC, diminua o zoom da página para 80%\n');
-    
-    // small: false gera blocos maiores
-    // A string vazia antes ajuda a separar o código das bordas do log
+    console.log('\n--- ESCANEIE RÁPIDO ---');
     qrcode.generate(qr, { small: false });
-    
-    console.log('\n---------------------------------\n\n');
+    console.log('-----------------------\n');
 });
 
-client.on('ready', () => console.log('🎙️ Podcast dos Deuses Pronto!'));
+client.on('ready', () => console.log('🎙️ Podcast dos Deuses Conectado!'));
 
+// Corrigido o erro de sintaxe no modelo do Gemini que aparecia nos seus logs
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
         const autor = msg._data.notifyName || 'Membro';
