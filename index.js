@@ -9,12 +9,11 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER PARA MANTER O RENDER ATIVO ---
+// --- SERVER PARA O RAILWAY NÃO DERRUBAR ---
 const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.write('🎙️ Olimpo Online!');
-  res.end();
+  res.writeHead(200);
+  res.end('🎙️ Olimpo Online no Railway!');
 }).listen(port);
 
 // --- CONEXÃO MONGODB ---
@@ -26,68 +25,32 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO REFORÇADA ---
+// --- CONFIGURAÇÃO PARA RAILWAY (DOCKER) ---
 const client = new Client({
     authStrategy: new LocalAuth(),
-    authTimeoutMs: 120000, // 2 minutos para conectar sem erro
+    authTimeoutMs: 240000, // 4 minutos para conectar
     puppeteer: {
+        executablePath: '/usr/bin/google-chrome-stable', // Caminho padrão no Docker do Puppeteer
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process']
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ]
     }
 });
 
 client.on('qr', (qr) => {
-    console.log('\n\n--- ESCANEIE ESTE QR CODE AGORA ---');
+    console.log('\n\n--- ESCANEIE ESTE QR CODE NO RAILWAY ---');
     qrcode.generate(qr, { small: false });
-    console.log('\n---------------------------------\n');
+    console.log('\n---------------------------------------\n');
 });
 
-client.on('ready', () => console.log('🚀 BOT ONLINE! Pode ir dormir, eu cuido do resto.'));
+client.on('ready', () => console.log('🚀 BOT ONLINE E BRABO! Boa noite, Caio.'));
 
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
         const autor = msg._data.notifyName || 'Membro';
         let texto = msg.body;
-        if (msg.hasMedia && (msg.type === 'audio' || msg.type === 'ptt')) {
-            try {
-                const media = await msg.downloadMedia();
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const result = await model.generateContent(["Resuma o áudio:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
-                texto = `[Áudio]: ${result.response.text()}`;
-            } catch (e) { texto = "[Áudio]"; }
-        }
-        await Fofoca.create({ autor, conteudo: texto });
-    }
-});
-
-async function gerarPodcast() {
-    console.log("🎬 Iniciando geração do Podcast das 20h...");
-    const fofocas = await Fofoca.find().sort({ timestamp: 1 });
-    if (fofocas.length === 0) return console.log("Sem fofocas para hoje.");
-    
-    const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
-    try {
-        const result = await model.generateContent(`Ricardo e Julia, tom épico e debochado, resumam as fofocas do dia: ${contexto}`);
-        const roteiro = result.response.text();
-
-        const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
-            { text: roteiro, model_id: "eleven_multilingual_v2" },
-            { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY }, responseType: 'arraybuffer' }
-        );
-        
-        fs.writeFileSync('voz.mp3', Buffer.from(resVoz.data));
-        
-        ffmpeg().input('voz.mp3').input('fundo.mp3').complexFilter(['[1:a]volume=0.15[a1]', '[0:a][a1]amix=inputs=2:duration=first[aout]']).map('[aout]').save('final.mp3').on('end', async () => {
-            const media = MessageMedia.fromFilePath('final.mp3');
-            await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
-            await Fofoca.deleteMany({});
-            console.log("✅ Podcast enviado para o Olimpo!");
-        });
-    } catch (err) { console.error("Falha na produção do áudio:", err); }
-}
-
-// Agendado para as 20:00 (ajustado para UTC se necessário)
-cron.schedule('0 20 * * *', () => gerarPodcast());
-client.initialize();
+        if (msg.hasMedia && (msg.type
