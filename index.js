@@ -9,7 +9,6 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER PARA EVITAR O SLEEP DO RENDER ---
 const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -17,7 +16,6 @@ http.createServer((req, res) => {
   res.end();
 }).listen(port);
 
-// --- CONEXÃO MONGODB ---
 mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Olimpo Conectado!"));
 const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ 
     autor: String, conteudo: String, timestamp: { type: Date, default: Date.now } 
@@ -26,28 +24,37 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO DE CONEXÃO REFORÇADA ---
+// --- CONFIGURAÇÃO PARA NÃO TRAVAR O RENDER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
-    authTimeoutMs: 120000, // 2 minutos para o celular não dar erro de conexão
+    authTimeoutMs: 240000, // Aumentei para 4 minutos (o máximo possível)
+    qrMaxRetries: 10,
     puppeteer: {
         headless: true,
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox', 
             '--disable-dev-shm-usage',
-            '--disable-gpu'
+            '--disable-gpu',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process'
         ]
     }
 });
 
 client.on('qr', (qr) => {
-    console.log('\n--- ESCANEIE AGORA (QR CODE GRANDE) ---');
+    console.log('\n--- QR CODE GERADO (LEITURA RÁPIDA) ---');
     qrcode.generate(qr, { small: false });
     console.log('---------------------------------------\n');
 });
 
-client.on('ready', () => console.log('🎙️ Podcast dos Deuses Online e Monitorando!'));
+client.on('ready', () => console.log('🎙️ Podcast dos Deuses Online!'));
+
+client.on('auth_failure', () => {
+    console.error('❌ Falha na autenticação. Reiniciando...');
+    process.exit(1); 
+});
 
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
@@ -66,15 +73,11 @@ client.on('message', async (msg) => {
 });
 
 async function gerarPodcast() {
-    console.log("🎬 Hora do Show! Gerando Podcast das 20h...");
     const fofocas = await Fofoca.find().sort({ timestamp: 1 });
-    if (fofocas.length === 0) return console.log("Sem fofocas hoje.");
-    
-    const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
+    if (fofocas.length === 0) return;
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(`Ricardo e Julia, tom épico e debochado, resumam as fofocas do dia: ${contexto}`);
+    const result = await model.generateContent(`Ricardo e Julia, tom épico, resumam: ${fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n')}`);
     const roteiro = result.response.text();
-
     try {
         const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
             { text: roteiro, model_id: "eleven_multilingual_v2" },
@@ -85,11 +88,9 @@ async function gerarPodcast() {
             const media = MessageMedia.fromFilePath('final.mp3');
             await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
             await Fofoca.deleteMany({});
-            console.log("✅ Podcast das 20h enviado com sucesso!");
         });
-    } catch (err) { console.error("Erro na produção:", err); }
+    } catch (err) { console.error(err); }
 }
 
-// Agendado para as 20h todo dia
 cron.schedule('0 20 * * *', () => gerarPodcast());
 client.initialize();
