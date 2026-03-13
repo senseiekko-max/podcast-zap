@@ -9,13 +9,13 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER SIMPLES (PORTA 10000) ---
+// --- SERVER PARA EVITAR TIMEOUT NO RENDER ---
 const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.write('Podcast Olimpo Online!');
   res.end();
-}).listen(port, () => console.log(`🌍 Servidor na porta ${port}`));
+}).listen(port);
 
 // --- CONEXÃO MONGODB ---
 mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Olimpo Conectado!"));
@@ -26,7 +26,7 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PUPPETEER SEM CAMINHO FIXO ---
+// --- CONFIGURAÇÃO PUPPETEER SEM CAMINHOS FIXOS ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
