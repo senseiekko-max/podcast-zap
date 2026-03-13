@@ -26,10 +26,10 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO OTIMIZADA PARA CONEXÃO ---
+// --- CONFIGURAÇÃO DE CONEXÃO REFORÇADA ---
 const client = new Client({
     authStrategy: new LocalAuth(),
-    authTimeoutMs: 60000, // Dá 1 minuto para o celular conectar
+    authTimeoutMs: 120000, // 2 minutos para o celular não dar erro de conexão
     puppeteer: {
         headless: true,
         args: [
@@ -42,14 +42,13 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => {
-    console.log('\n--- ESCANEIE RÁPIDO ---');
+    console.log('\n--- ESCANEIE AGORA (QR CODE GRANDE) ---');
     qrcode.generate(qr, { small: false });
-    console.log('-----------------------\n');
+    console.log('---------------------------------------\n');
 });
 
-client.on('ready', () => console.log('🎙️ Podcast dos Deuses Conectado!'));
+client.on('ready', () => console.log('🎙️ Podcast dos Deuses Online e Monitorando!'));
 
-// Corrigido o erro de sintaxe no modelo do Gemini que aparecia nos seus logs
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
         const autor = msg._data.notifyName || 'Membro';
@@ -67,12 +66,15 @@ client.on('message', async (msg) => {
 });
 
 async function gerarPodcast() {
+    console.log("🎬 Hora do Show! Gerando Podcast das 20h...");
     const fofocas = await Fofoca.find().sort({ timestamp: 1 });
-    if (fofocas.length === 0) return;
+    if (fofocas.length === 0) return console.log("Sem fofocas hoje.");
+    
     const contexto = fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n');
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(`Ricardo e Julia, tom épico, resumam: ${contexto}`);
+    const result = await model.generateContent(`Ricardo e Julia, tom épico e debochado, resumam as fofocas do dia: ${contexto}`);
     const roteiro = result.response.text();
+
     try {
         const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
             { text: roteiro, model_id: "eleven_multilingual_v2" },
@@ -83,9 +85,11 @@ async function gerarPodcast() {
             const media = MessageMedia.fromFilePath('final.mp3');
             await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
             await Fofoca.deleteMany({});
+            console.log("✅ Podcast das 20h enviado com sucesso!");
         });
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error("Erro na produção:", err); }
 }
 
+// Agendado para as 20h todo dia
 cron.schedule('0 20 * * *', () => gerarPodcast());
 client.initialize();
