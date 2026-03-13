@@ -9,14 +9,12 @@ const http = require('http');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 
-// --- SERVER PARA O RAILWAY NÃO DERRUBAR ---
 const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200);
   res.end('🎙️ Olimpo Online no Railway!');
 }).listen(port);
 
-// --- CONEXÃO MONGODB ---
 mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Banco de Dados Conectado!"));
 const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({ 
     autor: String, conteudo: String, timestamp: { type: Date, default: Date.now } 
@@ -25,32 +23,59 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PARA RAILWAY (DOCKER) ---
 const client = new Client({
     authStrategy: new LocalAuth(),
-    authTimeoutMs: 240000, // 4 minutos para conectar
+    authTimeoutMs: 240000,
     puppeteer: {
-        executablePath: '/usr/bin/google-chrome-stable', // Caminho padrão no Docker do Puppeteer
+        executablePath: '/usr/bin/google-chrome-stable',
         headless: true,
-        args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox', 
-            '--disable-dev-shm-usage',
-            '--disable-gpu'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
     }
 });
 
 client.on('qr', (qr) => {
-    console.log('\n\n--- ESCANEIE ESTE QR CODE NO RAILWAY ---');
+    console.log('\n\n--- ESCANEIE ESTE QR CODE ---');
     qrcode.generate(qr, { small: false });
-    console.log('\n---------------------------------------\n');
+    console.log('\n-----------------------------\n');
 });
 
-client.on('ready', () => console.log('🚀 BOT ONLINE E BRABO! Boa noite, Caio.'));
+client.on('ready', () => console.log('🚀 BOT ONLINE!'));
 
 client.on('message', async (msg) => {
     if (msg.from === ID_GRUPO) {
         const autor = msg._data.notifyName || 'Membro';
         let texto = msg.body;
-        if (msg.hasMedia && (msg.type
+        if (msg.hasMedia && (msg.type === 'audio' || msg.type === 'ptt')) {
+            try {
+                const media = await msg.downloadMedia();
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                const result = await model.generateContent(["Resuma o áudio:", { inlineData: { data: media.data, mimeType: media.mimetype } }]);
+                texto = `[Áudio]: ${result.response.text()}`;
+            } catch (e) { texto = "[Áudio]"; }
+        }
+        await Fofoca.create({ autor, conteudo: texto });
+    }
+});
+
+async function gerarPodcast() {
+    const fofocas = await Fofoca.find().sort({ timestamp: 1 });
+    if (fofocas.length === 0) return;
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    try {
+        const result = await model.generateContent(`Ricardo e Julia, tom épico e debochado, resumam as fofocas: ${fofocas.map(f => `${f.autor}: ${f.conteudo}`).join('\n')}`);
+        const roteiro = result.response.text();
+        const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
+            { text: roteiro, model_id: "eleven_multilingual_v2" },
+            { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY }, responseType: 'arraybuffer' }
+        );
+        fs.writeFileSync('voz.mp3', Buffer.from(resVoz.data));
+        ffmpeg().input('voz.mp3').input('fundo.mp3').complexFilter(['[1:a]volume=0.15[a1]', '[0:a][a1]amix=inputs=2:duration=first[aout]']).map('[aout]').save('final.mp3').on('end', async () => {
+            const media = MessageMedia.fromFilePath('final.mp3');
+            await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
+            await Fofoca.deleteMany({});
+        });
+    } catch (err) { console.error(err); }
+}
+
+cron.schedule('0 23 * * *', () => gerarPodcast());
+client.initialize();
