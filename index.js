@@ -13,7 +13,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200);
-  res.end('🎙️ Olimpo Online Ativo!');
+  res.end('🎙️ Olimpo Online Ativo com Atreus e Isis!');
 }).listen(port, '0.0.0.0');
 
 // --- CONEXÃO MONGODB ---
@@ -30,7 +30,7 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PUPPETEER CORRIGIDA ---
+// --- CONFIGURAÇÃO PUPPETEER PARA DOCKER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -52,7 +52,7 @@ client.on('qr', (qr) => {
 });
 
 client.on('ready', () => {
-    console.log('🚀 BOT ONLINE NO OLIMPO!');
+    console.log('🚀 ATREUS E ISIS ONLINE NO OLIMPO!');
 });
 
 client.on('message', async (msg) => {
@@ -64,7 +64,7 @@ client.on('message', async (msg) => {
                 const media = await msg.downloadMedia();
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const result = await model.generateContent([
-                    "Resuma este áudio de forma engraçada para um podcast:", 
+                    "Resuma este áudio de forma engraçada:", 
                     { inlineData: { data: media.data, mimeType: media.mimetype } }
                 ]);
                 texto = `[Áudio]: ${result.response.text()}`;
@@ -75,7 +75,7 @@ client.on('message', async (msg) => {
 });
 
 async function gerarPodcast() {
-    console.log("🎬 Atreus e Isis iniciando produção...");
+    console.log("🎬 Gravando o episódio de hoje...");
     const fofocas = await Fofoca.find().sort({ timestamp: 1 });
     if (fofocas.length === 0) return;
     
@@ -83,10 +83,11 @@ async function gerarPodcast() {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     try {
-        const result = await model.generateContent(`Atreus e Isis, ajam como apresentadores de podcast debochados e engraçados. Atreus é o homem, Isis é a mulher. Resumam e comentem estas conversas do grupo Olimpo: ${contexto}`);
+        const result = await model.generateContent(`Você é Atreus (homem debochado) e Isis (mulher irônica). Criem um roteiro de podcast curto comentando estas fofocas do grupo Olimpo de forma hilária: ${contexto}`);
         const roteiro = result.response.text();
 
-        const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
+        // Voz da Isis (Exemplo de ID feminino da ElevenLabs)
+        const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL`, 
             { text: roteiro, model_id: "eleven_multilingual_v2" },
             { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY }, responseType: 'arraybuffer' }
         );
@@ -100,7 +101,7 @@ async function gerarPodcast() {
                 const media = MessageMedia.fromFilePath('final.mp3');
                 await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
                 await Fofoca.deleteMany({});
-                console.log("✅ Podcast de Atreus e Isis enviado!");
+                console.log("✅ Podcast enviado!");
             });
     } catch (err) {
         console.error("Erro na geração:", err);
