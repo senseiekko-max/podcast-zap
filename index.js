@@ -13,7 +13,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const port = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200);
-  res.end('🎙️ Olimpo Online no Railway!');
+  res.end('🎙️ Olimpo Online Ativo!');
 }).listen(port, '0.0.0.0');
 
 // --- CONEXÃO MONGODB ---
@@ -30,12 +30,11 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PUPPETEER PARA DOCKER ---
+// --- CONFIGURAÇÃO PUPPETEER CORRIGIDA PARA O DOCKER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        executablePath: '/usr/bin/google-chrome-stable', 
-        browserWSEndpoint: null,
+        executablePath: '/usr/bin/google-chrome-stable',
         headless: true,
         args: [
             '--no-sandbox',
@@ -84,7 +83,7 @@ async function gerarPodcast() {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     try {
-        const result = await model.generateContent(`Caio e Julia, ajam como apresentadores de podcast debochados. Resumam estas conversas: ${contexto}`);
+        const result = await model.generateContent(`Ricardo e Julia, ajam como apresentadores de podcast debochados. Resumam estas conversas: ${contexto}`);
         const roteiro = result.response.text();
 
         const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
@@ -108,7 +107,6 @@ async function gerarPodcast() {
     }
 }
 
-// Cron: Todo dia às 20h (Horário de Brasília)
 cron.schedule('0 23 * * *', () => gerarPodcast());
 
 client.initialize();
