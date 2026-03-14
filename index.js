@@ -30,7 +30,7 @@ const Fofoca = mongoose.model('Fofoca', new mongoose.Schema({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const ID_GRUPO = '120363405181317045@g.us';
 
-// --- CONFIGURAÇÃO PUPPETEER CORRIGIDA PARA O DOCKER ---
+// --- CONFIGURAÇÃO PUPPETEER CORRIGIDA ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -75,7 +75,7 @@ client.on('message', async (msg) => {
 });
 
 async function gerarPodcast() {
-    console.log("🎬 Iniciando produção do podcast...");
+    console.log("🎬 Atreus e Isis iniciando produção...");
     const fofocas = await Fofoca.find().sort({ timestamp: 1 });
     if (fofocas.length === 0) return;
     
@@ -83,7 +83,7 @@ async function gerarPodcast() {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     try {
-        const result = await model.generateContent(`Ricardo e Julia, ajam como apresentadores de podcast debochados. Resumam estas conversas: ${contexto}`);
+        const result = await model.generateContent(`Atreus e Isis, ajam como apresentadores de podcast debochados e engraçados. Atreus é o homem, Isis é a mulher. Resumam e comentem estas conversas do grupo Olimpo: ${contexto}`);
         const roteiro = result.response.text();
 
         const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
@@ -100,7 +100,7 @@ async function gerarPodcast() {
                 const media = MessageMedia.fromFilePath('final.mp3');
                 await client.sendMessage(ID_GRUPO, media, { sendAudioAsVoice: true });
                 await Fofoca.deleteMany({});
-                console.log("✅ Podcast enviado com sucesso!");
+                console.log("✅ Podcast de Atreus e Isis enviado!");
             });
     } catch (err) {
         console.error("Erro na geração:", err);
