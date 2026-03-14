@@ -16,7 +16,7 @@ http.createServer((req, res) => {
   res.end('🎙️ Olimpo Online Ativo com Atreus e Isis!');
 }).listen(port, '0.0.0.0');
 
-// --- CONEXÃO MONGODB ---
+// --- CONEXÃO MONGODB --- 
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ Banco de Dados Conectado!"))
     .catch(err => console.error("❌ Erro no MongoDB:", err));
