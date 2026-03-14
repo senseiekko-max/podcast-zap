@@ -40,8 +40,7 @@ const client = new Client({
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--remote-debugging-port=9222'
+            '--disable-gpu'
         ]
     }
 });
@@ -84,7 +83,7 @@ async function gerarPodcast() {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     try {
-        const result = await model.generateContent(`Ricardo e Julia, ajam como apresentadores de podcast debochados. Resumam estas conversas: ${contexto}`);
+        const result = await model.generateContent(`Caio e Julia, ajam como apresentadores de podcast debochados. Resumam estas conversas: ${contexto}`);
         const roteiro = result.response.text();
 
         const resVoz = await axios.post(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, 
