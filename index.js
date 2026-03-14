@@ -34,7 +34,8 @@ const ID_GRUPO = '120363405181317045@g.us';
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        executablePath: '/usr/bin/google-chrome-stable',
+        executablePath: '/usr/bin/google-chrome-stable', 
+        browserWSEndpoint: null,
         headless: true,
         args: [
             '--no-sandbox',
